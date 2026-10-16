@@ -1,7 +1,7 @@
 #include "cli.h"
 #include<unistd.h>
 #include<getopt.h>
-
+#include <stdlib.h>
 
 
 int main(int argc, char **argv){
@@ -12,7 +12,8 @@ int main(int argc, char **argv){
 	}
 
 	else{
-		parser(argc, argv);
+		struct config shiva_config = {.shiva_timeout = 10};
+		parser(argc, argv, &shiva_config);
 	}
 
 	return 1;

@@ -1,7 +1,12 @@
 #ifndef SHIVA_CLI_H
 #define SHIVA_CLI_H
 
+struct config{
+	int shiva_timeout;
+	char * shiva_target;
+};
+
 void usage(void);
-void parser(int argc, char **argv);
+int parser(int argc, char **argv, struct config *shiva_config);
 
 #endif

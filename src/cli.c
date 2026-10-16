@@ -4,10 +4,9 @@
 #include "cli.h"
 
 
-void parser(int argc, char **argv){
+int parser(int argc, char **argv, struct config *shiva_config){
 
-	int timeout = 10, opt;
-	char *target = NULL;
+	int opt;
 
 	static const struct option longopts[] = {
 		{"timeout", required_argument, NULL, 't'},
@@ -18,13 +17,15 @@ void parser(int argc, char **argv){
 
 	while((opt = getopt_long(argc, argv, "+t:hr:", longopts, NULL)) != -1){
 		switch(opt){
-			case 't': timeout = atoi(optarg); break;
-			case 'r': target = optarg; break;
+			case 't': shiva_config->shiva_timeout = atoi(optarg); break;
+			case 'r': shiva_config->shiva_target = optarg; break;
 			case 'h': usage(); break;
 			default: usage(); break;
 			
 		}
 	}
+
+	return 0;
 
 }
 
