@@ -1,0 +1,4 @@
+shiva
+*.o
+core*
+a.out
