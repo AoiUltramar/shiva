@@ -3,7 +3,7 @@
 
 struct config{
 	int shiva_timeout;
-	char * shiva_target;
+	char **target_argv;
 };
 
 void usage(void);

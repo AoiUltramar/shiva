@@ -1,8 +1,8 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -g -Iinclude -D_GNU_SOURCE
-SRCS = src/main.c src/cli.c
+SRCS = src/main.c src/cli.c src/llock.c
 
-shiva: $(SRCS) include/cli.h
+shiva: $(SRCS) include/cli.h include/llock.h
 	$(CC) $(CFLAGS) -o $@ $(SRCS)
 
 .PHONY: clean
