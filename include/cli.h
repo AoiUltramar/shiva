@@ -3,6 +3,7 @@
 
 struct config{
 	int shiva_timeout;
+	int shiva_allow_degraded;
 	char **target_argv;
 };
 

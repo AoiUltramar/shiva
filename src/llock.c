@@ -11,6 +11,7 @@
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
 /* Rights that apply to files */
+#define SHIVA_ABI_FULL 6   /* highest ABI whose features Shiva uses */
 #define LL_FILE_R   (LANDLOCK_ACCESS_FS_READ_FILE)
 #define LL_FILE_RX  (LANDLOCK_ACCESS_FS_EXECUTE | \
 		     LANDLOCK_ACCESS_FS_READ_FILE)
@@ -29,8 +30,24 @@
 		     LANDLOCK_ACCESS_FS_MAKE_DIR | \
 		     LANDLOCK_ACCESS_FS_TRUNCATE)
 
-static int check_abi(void){
-	return syscall(SYS_landlock_create_ruleset, NULL, 0, LANDLOCK_CREATE_RULESET_VERSION);
+int shiva_llock_abi(int shiva_allow_degraded){
+
+	int abi = syscall(SYS_landlock_create_ruleset, NULL, 0, LANDLOCK_CREATE_RULESET_VERSION);
+
+	if(abi < 1){
+		fprintf(stderr, "shiva: Landlock is not available\n");
+		return -1;
+	}
+
+
+	//Shiva can run anyway with the warning, but the user must pass a flag
+	if (abi < SHIVA_ABI_FULL && !shiva_allow_degraded) {
+		fprintf(stderr, "shiva: kernel supports Landlock ABI %d, "
+	  	"Shiva needs %d for the full cage\n", abi, SHIVA_ABI_FULL);
+		return -1;
+	}
+
+	return abi;
 }
 
 //THose are the basic permissions the program should have to execute properly
@@ -78,7 +95,7 @@ static int shiva_llock_allow(int ruleset_fd, const char *shiva_target){
 
 }
 
-int shiva_llock_target(const char *shiva_target){
+int shiva_llock_target(const char *shiva_target, int abi){
 
 	struct landlock_ruleset_attr attr = {
         .handled_access_fs =
@@ -107,34 +124,38 @@ int shiva_llock_target(const char *shiva_target){
                 LANDLOCK_SCOPE_SIGNAL,
         };
 
-	int abi = check_abi();
-
-	if(abi < 1){
-		fprintf(stderr, "Landlock is not available\n");
+	if(abi < 0){
 		return 1;
 	}
 
 	switch (abi) {
+	
 	case 1:
     	/* Removes LANDLOCK_ACCESS_FS_REFER for ABI < 2 */
     		attr.handled_access_fs &= ~LANDLOCK_ACCESS_FS_REFER;
+		fprintf(stderr, "WARNING: LANDLOCK_ACCESS_FS_REFER not available\n");
     		__attribute__((fallthrough));
 	case 2:
     	/* Removes LANDLOCK_ACCESS_FS_TRUNCATE for ABI < 3 */
     		attr.handled_access_fs &= ~LANDLOCK_ACCESS_FS_TRUNCATE;
+		fprintf(stderr, "WARNING: LANDLOCK_ACCESS_FS_TRUNCATE not available\n");
     		__attribute__((fallthrough));
 	case 3:
     	/* Removes network support for ABI < 4 */
     		attr.handled_access_net &=
         	~(LANDLOCK_ACCESS_NET_BIND_TCP |
           	LANDLOCK_ACCESS_NET_CONNECT_TCP);
+		fprintf(stderr, "WARNING: LANDLOCK_ACCESS_NET_BIND_TCP and LANDLOCK_ACCESS_NET_CONNECT_TCP are not available\n");
+
     		__attribute__((fallthrough));
 	case 4:
     	/* Removes LANDLOCK_ACCESS_FS_IOCTL_DEV for ABI < 5 */
     		attr.handled_access_fs &= ~LANDLOCK_ACCESS_FS_IOCTL_DEV;
+		fprintf(stderr, "WARNING: LANDLOCK_ACCESS_FS_IOCTL_DEV not available\n");
     		__attribute__((fallthrough));
 	case 5:
     	/* Removes LANDLOCK_SCOPE_* for ABI < 6 */
+		fprintf(stderr, "WARNING: LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET and LANDLOCK_SCOPE_SIGNAL are not available\n");
     		attr.scoped &= ~(LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET |
                              LANDLOCK_SCOPE_SIGNAL);
         }
@@ -146,25 +167,22 @@ int shiva_llock_target(const char *shiva_target){
 		return 1;
 	}
 
-	shiva_llock_allow(ruleset_fd, shiva_target);
-
-	prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0,0);
-        syscall(SYS_landlock_restrict_self, ruleset_fd, 0);
-
+	if (shiva_llock_allow(ruleset_fd, shiva_target))
+		goto err;
 	if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0)) {
 		perror("prctl(PR_SET_NO_NEW_PRIVS)");
-		return 1;
+		goto err;
 	}
-
 	if (syscall(SYS_landlock_restrict_self, ruleset_fd, 0)) {
 		perror("landlock_restrict_self");
-		return 1;
+		goto err;
 	}
-
 	close(ruleset_fd);
-
-	fprintf(stderr, "All set as chained\n");
 	return 0;
+
+	err:
+		close(ruleset_fd);
+		return 1;
 }
 
 
