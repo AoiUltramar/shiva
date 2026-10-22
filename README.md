@@ -82,6 +82,7 @@ only used when you write `./` explicitly.
 | 1 | Shiva could not set up the cage (for example, Landlock unavailable) |
 | 2 | usage error |
 | 127 | program not found |
+| 124 | the target ran longer than the timeout and was killed |
 
 Shiva never runs the target uncaged. With `--allow-degraded` on an older
 kernel, it prints a warning for each protection that is missing.
