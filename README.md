@@ -68,6 +68,7 @@ $ shiva -r ls /usr                # allowed: lists /usr
 $ shiva -r ls /home               # denied: Permission denied
 $ shiva -r cat /etc/hostname      # denied
 $ shiva -r ./sample               # a program in the current folder
+$ shiva -t 2 -r sleep 10          # timed out after 2 seconds, exit 124, after exactly 2 s.
 ```
 
 Programs given without a `/` are looked up in `$PATH`. The current folder is
