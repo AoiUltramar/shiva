@@ -30,6 +30,8 @@
 		     LANDLOCK_ACCESS_FS_MAKE_DIR | \
 		     LANDLOCK_ACCESS_FS_TRUNCATE)
 
+
+/* Checks the ABI, that dictates the rules we can enforce and the ones we can't */
 int shiva_llock_abi(int shiva_allow_degraded){
 
 	int abi = syscall(SYS_landlock_create_ruleset, NULL, 0, LANDLOCK_CREATE_RULESET_VERSION);
@@ -50,8 +52,8 @@ int shiva_llock_abi(int shiva_allow_degraded){
 	return abi;
 }
 
-//THose are the basic permissions the program should have to execute properly
-//In the future, the user should be able to customize which parameters to restrict and which to allow
+/* Those are the basic permissions the program should have to execute properly */
+/* In the future, the user should be able to customize which parameters to restrict and which to allow */
 static int add_path_rule(int ruleset_fd, const char *path, uint64_t access)
 {
 	struct landlock_path_beneath_attr rule = {
@@ -72,6 +74,7 @@ static int add_path_rule(int ruleset_fd, const char *path, uint64_t access)
 	return ret;
 }
 
+/* We have a set of rules that are enforced by default, however the program cannot run if everything is locked, thats why we need shiva_llock__allow */
 static int shiva_llock_allow(int ruleset_fd, const char *shiva_target){
 	//This will be changed at will in the future
 	static const struct path_rule default_rules[] = {
@@ -177,6 +180,8 @@ int shiva_llock_target(const char *shiva_target, int abi){
 		perror("landlock_restrict_self");
 		goto err;
 	}
+
+	/* we no longer need ruleset_fd */
 	close(ruleset_fd);
 	return 0;
 
