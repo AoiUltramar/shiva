@@ -104,7 +104,7 @@ kernel, it prints a warning for each protection that is missing.
 - [x] `--allow-degraded` to run with a weaker cage, with a warning
 - [x] Resolve programs through `$PATH`
 - [x] `make install` / `make uninstall`
-- [ ] Enforce `--timeout`
+- [x] Enforce `--timeout`
 - [ ] Scratch directory the target can write to
 
 **v0.2: the report**
