@@ -1,7 +1,25 @@
+#include <errno.h>
 #include <getopt.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include "cli.h"
+
+/* Longest timeout that still fits in poll()'s int milliseconds (about 24 days) */
+#define SHIVA_TIMEOUT_MAX (INT_MAX / 1000)
+
+static int parse_timeout(const char *arg, int *out)
+{
+	char *end;
+	long val;
+
+	errno = 0;
+	val = strtol(arg, &end, 10);
+	if (errno || end == arg || *end || val <= 0 || val > SHIVA_TIMEOUT_MAX)
+		return -1;
+	*out = (int)val;
+	return 0;
+}
 
 int parser(int argc, char **argv, struct config *shiva_config){
 
@@ -25,9 +43,10 @@ int parser(int argc, char **argv, struct config *shiva_config){
 	while((opt = getopt_long(argc, argv, "+t:ahr", longopts, NULL)) != -1){
 		switch(opt){
 			case 't':
-				shiva_config->shiva_timeout = atoi(optarg);
-				if (shiva_config->shiva_timeout <= 0) {
-					fprintf(stderr, "shiva: invalid timeout '%s'\n", optarg);
+				if (parse_timeout(optarg, &shiva_config->shiva_timeout)) {
+					fprintf(stderr, "shiva: invalid timeout '%s' "
+						"(whole seconds, 1 to %d)\n",
+						optarg, SHIVA_TIMEOUT_MAX);
 					return 2;
 				}
 				break;
@@ -65,9 +84,9 @@ int parser(int argc, char **argv, struct config *shiva_config){
 }
 
 void usage(void){
-	fprintf(stderr, "usage: shiva [-a] -r [-t SECS] PROGRAM [ARGS...]\n"
-			"  -r, --run           run PROGRAM inside the cage\n"
-			"  -t, --timeout SECS  kill PROGRAM after SECS seconds (default 10)\n"
-	 		"  -a, --allow-deagraded allow PROGRAM to run even if the kernel cannot enforce all rules available\n"
-			"  -h, --help          show this help\n");
+	fprintf(stderr, "usage: shiva -r [-t SECS] [-a] PROGRAM [ARGS...]\n"
+			"  -r, --run             run PROGRAM inside the cage\n"
+			"  -t, --timeout SECS    kill PROGRAM after SECS seconds (default 10)\n"
+			"  -a, --allow-degraded  run even if the kernel cannot enforce the full cage\n"
+			"  -h, --help            show this help\n");
 }
