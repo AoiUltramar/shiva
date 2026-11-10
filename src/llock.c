@@ -1,8 +1,9 @@
-
+#include <errno.h>
 #include <fcntl.h>
 #include <linux/landlock.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <string.h>
 #include <sys/prctl.h>
 #include <sys/syscall.h>
 #include <unistd.h>
@@ -54,7 +55,8 @@ int shiva_llock_abi(int shiva_allow_degraded){
 
 /* Those are the basic permissions the program should have to execute properly */
 /* In the future, the user should be able to customize which parameters to restrict and which to allow */
-static int add_path_rule(int ruleset_fd, const char *path, uint64_t access)
+static int add_path_rule(int ruleset_fd, const char *path, uint64_t access,
+			 int optional)
 {
 	struct landlock_path_beneath_attr rule = {
 		.allowed_access = access,
@@ -63,13 +65,17 @@ static int add_path_rule(int ruleset_fd, const char *path, uint64_t access)
 	int ret;
 
 	if (rule.parent_fd < 0) {
-		perror(path);
+		/* e.g. /lib64 does not exist on every system: nothing to allow */
+		if (optional && errno == ENOENT)
+			return 0;
+		fprintf(stderr, "shiva: %s: %s\n", path, strerror(errno));
 		return -1;
 	}
 	ret = syscall(SYS_landlock_add_rule, ruleset_fd,
 		      LANDLOCK_RULE_PATH_BENEATH, &rule, 0);
 	if (ret)
-		perror(path);
+		fprintf(stderr, "shiva: landlock rule for %s: %s\n", path,
+			strerror(errno));
 	close(rule.parent_fd);
 	return ret;
 }
@@ -87,11 +93,13 @@ static int shiva_llock_allow(int ruleset_fd, const char *shiva_target){
 	};
 
 	for (size_t i = 0; i < ARRAY_SIZE(default_rules); i++){
-		add_path_rule(ruleset_fd, default_rules[i].path,default_rules[i].access);
-	}/* optional: warn only */
+		/* a missing default rule only means less access: warn and go on */
+		add_path_rule(ruleset_fd, default_rules[i].path,
+			      default_rules[i].access, 1);
+	}
 
-	if (add_path_rule(ruleset_fd, shiva_target, LL_FILE_RX)){
-		return 1;                                 
+	if (add_path_rule(ruleset_fd, shiva_target, LL_FILE_RX, 0)){
+		return 1;
 	}
 
 	return 0;
