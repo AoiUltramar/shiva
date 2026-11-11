@@ -81,7 +81,8 @@ static int add_path_rule(int ruleset_fd, const char *path, uint64_t access,
 }
 
 /* We have a set of rules that are enforced by default, however the program cannot run if everything is locked, thats why we need shiva_llock__allow */
-static int shiva_llock_allow(int ruleset_fd, const char *shiva_target){
+static int shiva_llock_allow(int ruleset_fd, const char *shiva_target,
+			     const char *shiva_home, uint64_t handled){
 	//This will be changed at will in the future
 	static const struct path_rule default_rules[] = {
 		{ "/usr",             LL_DIR_RX  },
@@ -102,11 +103,24 @@ static int shiva_llock_allow(int ruleset_fd, const char *shiva_target){
 		return 1;
 	}
 
+	/*
+	 * The fake home: read and write, but not execute, so a dropped
+	 * payload cannot be started. REFER lets the target rename files
+	 * between directories inside it (both ends need the right, and
+	 * nothing else has it). A rule may only name rights the ruleset
+	 * handles, which depends on the ABI.
+	 */
+	if (shiva_home &&
+	    add_path_rule(ruleset_fd, shiva_home,
+			  (LL_DIR_RW | LANDLOCK_ACCESS_FS_REFER) & handled, 0)){
+		return 1;
+	}
+
 	return 0;
 
 }
 
-int shiva_llock_target(const char *shiva_target, int abi){
+int shiva_llock_target(const char *shiva_target, const char *shiva_home, int abi){
 
 	struct landlock_ruleset_attr attr = {
         .handled_access_fs =
@@ -178,7 +192,8 @@ int shiva_llock_target(const char *shiva_target, int abi){
 		return 1;
 	}
 
-	if (shiva_llock_allow(ruleset_fd, shiva_target))
+	if (shiva_llock_allow(ruleset_fd, shiva_target, shiva_home,
+			      attr.handled_access_fs))
 		goto err;
 	if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0)) {
 		perror("prctl(PR_SET_NO_NEW_PRIVS)");

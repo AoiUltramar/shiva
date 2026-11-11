@@ -9,10 +9,16 @@
  *    which would bypass the rule above.
  *  - ioctl(TIOCSTI / TIOCLINUX): pushing keystrokes into the terminal the
  *    target inherited, i.e. typing commands into the user's shell.
+ *  - new namespaces (unshare, clone with CLONE_NEW*, clone3, setns): in a
+ *    user namespace of its own a program is "root" over network, mount and
+ *    other namespaces it creates, which opens up a lot of kernel code that
+ *    an ordinary user cannot reach. Shiva sets up the one namespace the
+ *    cage needs before this filter is installed (see mntns.c).
  */
 #include <errno.h>
 #include <linux/audit.h>
 #include <linux/filter.h>
+#include <linux/sched.h>
 #include <linux/seccomp.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -44,6 +50,15 @@
 #define DENY(err)       RET(SECCOMP_RET_ERRNO | ((err) & SECCOMP_RET_DATA))
 /* if A == k fall through to the next instruction, else skip it */
 #define IF_EQ(k)        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, (k), 0, 1)
+/* if A == k skip the next n instructions, else fall through */
+#define IF_EQ_SKIP(k, n) BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, (k), (n), 0)
+/* if A has any of the bits fall through to the next instruction, else skip it */
+#define IF_ANY_BIT(bits) BPF_JUMP(BPF_JMP | BPF_JSET | BPF_K, (bits), 0, 1)
+
+/* CLONE_NEWTIME is 0x80: never set in a valid clone() exit signal */
+#define NEW_NAMESPACE (CLONE_NEWUSER | CLONE_NEWNS | CLONE_NEWNET | \
+		       CLONE_NEWPID | CLONE_NEWIPC | CLONE_NEWUTS | \
+		       CLONE_NEWCGROUP | CLONE_NEWTIME)
 
 int shiva_seccomp_install(void)
 {
@@ -63,10 +78,21 @@ int shiva_seccomp_install(void)
 		IF_EQ(__NR_io_uring_setup),
 		DENY(ENOSYS),
 
-		IF_EQ(__NR_socket),
-		BPF_JUMP(BPF_JMP | BPF_JA, 3, 0, 0),
-		IF_EQ(__NR_ioctl),
-		BPF_JUMP(BPF_JMP | BPF_JA, 5, 0, 0),
+		/* clone3 hides its flags in a struct: ENOSYS makes libc use clone */
+		IF_EQ(__NR_clone3),
+		DENY(ENOSYS),
+		IF_EQ(__NR_setns),
+		DENY(EPERM),
+
+		/*
+		 * The rest depends on an argument: jump to the block that
+		 * checks it. The numbers count the instructions in between,
+		 * so they change when a block above the target grows.
+		 */
+		IF_EQ_SKIP(__NR_socket,  4),
+		IF_EQ_SKIP(__NR_ioctl,   7),
+		IF_EQ_SKIP(__NR_unshare, 12),
+		IF_EQ_SKIP(__NR_clone,   11),
 		RET(SECCOMP_RET_ALLOW),
 
 		/* socket(domain, ...) */
@@ -80,6 +106,12 @@ int shiva_seccomp_install(void)
 		IF_EQ(TIOCSTI),
 		DENY(EPERM),
 		IF_EQ(TIOCLINUX),
+		DENY(EPERM),
+		RET(SECCOMP_RET_ALLOW),
+
+		/* unshare(flags) and clone(flags, ...): flags come first on all three architectures */
+		LOAD(ARG_LO(0)),
+		IF_ANY_BIT(NEW_NAMESPACE),
 		DENY(EPERM),
 		RET(SECCOMP_RET_ALLOW),
 	};

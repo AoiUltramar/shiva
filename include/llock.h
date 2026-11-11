@@ -6,7 +6,11 @@ struct path_rule {
 	uint64_t access;
 };
 
-int shiva_llock_target(const char *shiva_target, int abi);
+/*
+ * Cage the calling process. SHIVA_HOME is the one directory the target may
+ * write to (see fakehome.h), or NULL for none.
+ */
+int shiva_llock_target(const char *shiva_target, const char *shiva_home, int abi);
 int shiva_llock_abi(int shiva_allow_degraded);
 
 #endif
